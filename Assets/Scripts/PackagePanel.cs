@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,12 +11,16 @@ public class PackagePanel : MonoBehaviour
 
     public Transform gridTran;
     public Transform itemTran;
-
+    public Button btnOpen;
+    public Transform supplyGridsTran;
+    public Transform supplyItemTran;
 
     // 记录背包每个格子的加载状态（true表示已加载）
     private bool[] showState = new bool[32];
     // 记录所有加载的背包物品图片对象
     private Dictionary<int,PackageItemObj> packageItemDic = new Dictionary<int,PackageItemObj>();
+
+    private bool isLoad;
 
     private void Awake()
     {
@@ -25,6 +30,15 @@ public class PackagePanel : MonoBehaviour
     void Start()
     {
         LoadPackageGrids();
+        btnOpen.onClick.AddListener(() =>
+        {
+            if (!isLoad)
+            {
+                LoadSupplyGrids();
+                isLoad = true;
+            }
+            LoadSupplyItem();
+        });
     }
 
     // 加载背包中的格子
@@ -41,23 +55,6 @@ public class PackagePanel : MonoBehaviour
             }
         }
     }
-
-    // 加载显示当前背包中的所有物品
-    public void ShowPackageItem()
-    {
-        Dictionary<int, PackageItem> itemDic = PackageDatagr.Instance.itemDic;
-        foreach(int gridIndex in itemDic.Keys)
-        {
-            if (showState[gridIndex])
-            {
-                continue;
-            }
-            else
-            {
-                ShowPackageItem(itemDic[gridIndex]);
-            }
-        }
-    }
     
     // 显示某个格子索引位置的物品
     public void ShowPackageItem(PackageItem packageItem)
@@ -68,9 +65,12 @@ public class PackagePanel : MonoBehaviour
         (obj.transform as RectTransform).anchoredPosition = new Vector2(11+(packageItem.gridIndex % 8)*51,-11-(packageItem.gridIndex / 8)*51);
         (obj.transform as RectTransform).sizeDelta = new Vector2(51* packageItem.width-3,51* packageItem.height-3);
         obj.GetComponent<Image>().sprite = item.itemIcon;
-        obj.GetComponent<PackageItemObj>().SetItemId(packageItem.itemId);
+        PackageItemObj packageItemObj = obj.GetComponent<PackageItemObj>();
+        packageItemObj.InitPackageItemObj(packageItem.gridIndex);
 
-        for(int i=0;i<packageItem.height; i++)
+        packageItemDic.Add(packageItem.gridIndex, packageItemObj);
+
+        for (int i=0;i<packageItem.height; i++)
         {
             for(int j=0;j<packageItem.width; j++)
             {
@@ -85,6 +85,7 @@ public class PackagePanel : MonoBehaviour
         if (packageItemDic.ContainsKey(preIndex))
         {
             PackageItemObj item = packageItemDic[preIndex];
+            item.InitPackageItemObj(newItem.gridIndex);
             RectTransform rect = item.transform as RectTransform;
             rect.anchoredPosition = new Vector2(11 + (newItem.gridIndex % 8) * 51, -11 - (newItem.gridIndex / 8) * 51);
             if (isRotate)
@@ -128,22 +129,101 @@ public class PackagePanel : MonoBehaviour
 
     }
 
+    // 用于原物体在其他物体移动好之后修改自身物体位置
+    public void MovePackageItem(PackageItemObj packageItemObj, PackageItem newItem)
+    {
+        packageItemObj.InitPackageItemObj(newItem.gridIndex);
+        RectTransform rect = packageItemObj.transform as RectTransform;
+        rect.anchoredPosition = new Vector2(11 + (newItem.gridIndex % 8) * 51, -11 - (newItem.gridIndex / 8) * 51);
+        packageItemDic.Add(newItem.gridIndex, packageItemObj);
+        
+        // 修改state状态
+        for (int i = 0; i < newItem.height; i++)
+        {
+            for (int j = 0; j < newItem.width; j++)
+            {
+                showState[newItem.gridIndex + i * 8 + j] = true;
+            }
+        }
+    }
+
+
     // 删除创建好的图片
     public void DeletePackageItem(PackageItem packageItem)
     {
         if (packageItemDic.ContainsKey(packageItem.gridIndex))
         {
-            Destroy(packageItemDic[packageItem.gridIndex]);
+            Destroy(packageItemDic[packageItem.gridIndex].gameObject);           
             packageItemDic.Remove(packageItem.gridIndex);
-        }
 
-        // 修改state状态
-        for (int i = 0; i < packageItem.height; i++)
-        {
-            for (int j = 0; j < packageItem.width; j++)
+            // 修改state状态
+            for (int i = 0; i < packageItem.height; i++)
             {
-                showState[packageItem.gridIndex + i * 8 + j] = false;
+                for (int j = 0; j < packageItem.width; j++)
+                {
+                    showState[packageItem.gridIndex + i * 8 + j] = false;
+                }
             }
         }
+    }
+
+    // 删除创建好的图片存储信息，图片返回出去不删除用于后续移动
+    public PackageItemObj ReturnPackageItem(PackageItem packageItem)
+    {
+        PackageItemObj itemObj = packageItemDic[packageItem.gridIndex];
+        if (packageItemDic.ContainsKey(packageItem.gridIndex))
+        {
+            packageItemDic.Remove(packageItem.gridIndex);
+
+            // 修改state状态
+            for (int i = 0; i < packageItem.height; i++)
+            {
+                for (int j = 0; j < packageItem.width; j++)
+                {
+                    showState[packageItem.gridIndex + i * 8 + j] = false;
+                }
+            }
+            return itemObj;
+        }
+        return null;
+    }
+
+    // 加载物资想中的格子
+    public void LoadSupplyGrids()
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            for (int j = 0; j < 5; j++)
+            {
+                GameObject grid = Instantiate(Resources.Load<GameObject>("Model/Grid"));
+                grid.transform.SetParent(supplyGridsTran, false);
+                (grid.transform as RectTransform).anchoredPosition = new Vector2(10 + 51 * j, -10 - 51 * i);
+                grid.GetComponent<PackageGridObj>().gridIndex = i * 8 + j;
+            }
+        }
+    }
+
+    public void LoadSupplyItem()
+    {
+        StartCoroutine(DoLoadSupplyItem(1.5f));
+    }
+
+    // 测试，这里直接选择2号物品
+    IEnumerator DoLoadSupplyItem(float waitTime)
+    {
+        Item item = DataMgr.Instance.GetItem(2);
+        GameObject obj = Instantiate(Resources.Load<GameObject>("Model/supplyItem"));
+        obj.transform.SetParent(supplyItemTran, false);
+        (obj.transform as RectTransform).anchoredPosition = new Vector2(11, -11);
+        (obj.transform as RectTransform).sizeDelta = new Vector2(51 * item.width - 3, 51 * item.height - 3);
+        Image img = obj.GetComponent<Image>();
+        img.sprite = Resources.Load<Sprite>("Pic/load");
+        img.raycastTarget = false;
+        yield return new WaitForSeconds(waitTime);
+        obj.GetComponent<Image>().sprite = item.itemIcon;
+        img.raycastTarget = true;
+
+        SupplyItemObj supplyItemObj = obj.GetComponent<SupplyItemObj>();
+        supplyItemObj.InitPackageItemObj(2, itemTran);
     }
 }

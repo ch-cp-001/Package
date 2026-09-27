@@ -223,3 +223,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e5974b7d6f8212d4e8fe2771d3e7ba6e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gridIndex: 0
+  texNum: {fileID: 3339568412784411060}

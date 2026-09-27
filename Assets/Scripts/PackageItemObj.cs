@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 public class PackageItemObj : MonoBehaviour,IBeginDragHandler,IDragHandler,IEndDragHandler
 {
-    private int itemId;
+    private int gridIndex;
     private Image img;
     // Start is called before the first frame update
     void Start()
@@ -13,9 +13,9 @@ public class PackageItemObj : MonoBehaviour,IBeginDragHandler,IDragHandler,IEndD
         img = GetComponent<Image>();
     }
 
-    public void SetItemId(int itemId)
+    public void InitPackageItemObj(int gridIndex)
     {
-        this.itemId = itemId;
+        this.gridIndex = gridIndex;
     }
 
     // 偏移量
@@ -55,6 +55,21 @@ public class PackageItemObj : MonoBehaviour,IBeginDragHandler,IDragHandler,IEndD
         if(OverStep((dragObj.transform as RectTransform).anchoredPosition))
         {
             Debug.Log("越界");
+            // 判断是否拖拽到装备部分
+            GameObject obj = eventData.pointerCurrentRaycast.gameObject;
+            EquipObj equip = obj.GetComponent<EquipObj>();
+            Item item = DataMgr.Instance.GetItem(PackageDataMgr.Instance.GetPackageItem(gridIndex).itemId);
+            if(equip != null && equip.ItemType == item.type)
+            {
+                Debug.Log(item.itemId);
+                Debug.Log(item.itemName);
+                equip.Init(item);
+                Destroy(gameObject);
+            }
+            else
+            {
+                Transparent(true);
+            }
             Destroy(dragObj);
             return;
         }
@@ -63,10 +78,11 @@ public class PackageItemObj : MonoBehaviour,IBeginDragHandler,IDragHandler,IEndD
         int dragY = (int)(-(dragObj.transform as RectTransform).anchoredPosition.y - 10) /51;
         int dragIndex = dragY * 8 + dragX;
         Debug.Log(dragIndex);
-        
+
         //判断当前物体是否可以放在新位置（直接放，如果原来有物体就尝试将原本的物体替换到他的位置，替换失败就向后重新插入背包）
-
-
+        PackageDataMgr.Instance.MoveItem(gridIndex, dragIndex);
+        Transparent(true);
+        Destroy(dragObj);
     }
 
     // 判断拖拽后是否越界
@@ -93,7 +109,7 @@ public class PackageItemObj : MonoBehaviour,IBeginDragHandler,IDragHandler,IEndD
 
     public GameObject CreateDragItem()
     {
-        Item item = DataMgr.Instance.GetItem(itemId);
+        Item item = DataMgr.Instance.GetItem(PackageDataMgr.Instance.GetPackageItem(gridIndex).itemId);
         GameObject obj = Instantiate(Resources.Load<GameObject>("Model/Item"));
         obj.transform.SetParent(transform.parent, false);
         (obj.transform as RectTransform).anchoredPosition = (transform as RectTransform).anchoredPosition;
